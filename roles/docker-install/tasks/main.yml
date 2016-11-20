@@ -1,0 +1,25 @@
+---
+
+- name: Download the offical Docker installer
+  get_url:
+    url: "{{ docker_url }}"
+    dest: "/tmp/install-docker.sh"
+    mode: "0755"
+
+- name: Run the offical Docker installer
+  command: "/tmp/install-docker.sh"
+  args:
+    creates: /usr/bin/docker
+
+- name: Adding user {{ ansible_user }} to Docker group
+  user:
+    name: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    groups: "docker"
+    append: yes
+
+- name: Download version {{ compose_version }} of Docker Compose
+  get_url:
+    url: "https://github.com/docker/compose/releases/download/{{ compose_version }}/docker-compose-{{ ansible_system }}-{{ ansible_architecture }}"
+    dest: "/usr/local/bin/docker-compose"
+    mode: "0755"

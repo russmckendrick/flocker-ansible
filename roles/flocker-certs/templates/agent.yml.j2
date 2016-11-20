@@ -1,0 +1,10 @@
+"version": 1
+"control-service":
+  "hostname": "{{ hostvars['managerhost']['ansible_nodename'] }}"
+  "port": 4524
+"dataset":
+  "backend": "aws"
+  "region": "{{ aws_region }}"
+  "zone": "{{ aws_zone }}"
+  "access_key_id": "{{ aws_access_id }}"
+  "secret_access_key": "{{ aws_secret_key }}"

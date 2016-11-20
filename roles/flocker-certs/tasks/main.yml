@@ -1,0 +1,254 @@
+---
+
+- stat: path=/tmp/certs-
+  register: swarm_init
+
+- name: Set  correct ssh key path
+  set_fact:
+    ansible_ssh_private_key_file: "~/.ssh/id_rsa"
+  when: inventory_hostname == "managerhost"
+
+- name: create /tmp/{{ cluster_name }}
+  file:
+    path: "/tmp/{{ cluster_name }}"
+    state: directory
+  when: inventory_hostname == "managerhost"
+
+# Put Agent Config in place
+####################################################################################################
+
+- name: Copy the agent.yml in place on the instances
+  template:
+    src: "agent.yml.j2"
+    dest: "/etc/flocker/agent.yml"
+  become: true
+
+# Cluster certificate
+####################################################################################################
+
+- name: Create the signing certificate
+  shell: "flocker-ca initialize {{ cluster_name }}"
+  args:
+    chdir: "/tmp/{{ cluster_name }}"
+    creates: "/tmp/{{ cluster_name }}/cluster.crt"
+  when: inventory_hostname == "managerhost"
+
+- name: Copy cluster.crt to the nodes
+  synchronize:
+    src: "/tmp/{{ cluster_name }}/cluster.crt"
+    dest: /etc/flocker/cluster.crt
+    owner: true
+  become: true
+  delegate_to: managerhost
+
+# Control certificate
+####################################################################################################
+
+- name: Create the control certificate
+  shell: "flocker-ca create-control-certificate {{ hostvars['managerhost']['ansible_nodename'] }}"
+  args:
+    chdir: "/tmp/{{ cluster_name }}"
+    creates: "/tmp/{{ cluster_name }}/control-{{ hostvars['managerhost']['ansible_nodename'] }}.crt"
+  when: inventory_hostname == "managerhost"
+
+- name: Copy control.crt on the local node
+  shell: "cp /tmp/{{ cluster_name }}/control-{{ hostvars['managerhost']['ansible_nodename'] }}.crt /etc/flocker/control-service.crt"
+  args:
+    creates: "/etc/flocker/control-service.crt"
+  become: true
+  when: inventory_hostname == "managerhost"
+
+- name: Copy control.key on the local node
+  shell: "cp /tmp/{{ cluster_name }}/control-{{ hostvars['managerhost']['ansible_nodename'] }}.key /etc/flocker/control-service.key"
+  args:
+    creates: "/etc/flocker/control-service.key"
+  become: true
+  when: inventory_hostname == "managerhost"
+
+# Plug-in certificates
+####################################################################################################
+
+- name: Create the plugin certificate
+  shell: "flocker-ca create-api-certificate plugin"
+  args:
+    chdir: "/tmp/{{ cluster_name }}"
+    creates: "/tmp/{{ cluster_name }}/plugin.crt"
+  when: inventory_hostname == "managerhost"
+
+- name: Copy plugin.crt to the nodes
+  synchronize:
+    src: "/tmp/{{ cluster_name }}/plugin.crt"
+    dest: /etc/flocker/plugin.crt
+    owner: true
+  become: true
+  delegate_to: managerhost
+
+- name: Copy plugin.key to the nodes
+  synchronize:
+    src: "/tmp/{{ cluster_name }}/plugin.key"
+    dest: /etc/flocker/plugin.key
+    owner: true
+  become: true
+  delegate_to: managerhost
+
+# User certificates
+####################################################################################################
+
+- name: Create the api user certificate
+  shell: "flocker-ca create-api-certificate user"
+  args:
+    chdir: "/tmp/{{ cluster_name }}"
+    creates: "/tmp/{{ cluster_name }}/user.crt"
+  when: inventory_hostname == "managerhost"
+
+- name: Copy user.crt on the local node
+  shell: "cp /tmp/{{ cluster_name }}/user.crt ~/user.crt"
+  args:
+    creates: "~/user.crt"
+  when: inventory_hostname == "managerhost"
+
+- name: Copy user.key on the local node
+  shell: "cp /tmp/{{ cluster_name }}/user.crt ~/user.key"
+  args:
+    creates: "~/user.key"
+  when: inventory_hostname == "managerhost"
+
+- name: Copy cluster.crt on the local node
+  shell: "cp /tmp/{{ cluster_name }}/cluster.crt ~/cluster.crt"
+  args:
+    creates: "~/cluster.crt"
+  when: inventory_hostname == "managerhost"
+
+# Node certificates
+####################################################################################################
+
+- name: Create node certifcate directories
+  file:
+    path: "/tmp/{{ cluster_name }}/{{ inventory_hostname }}"
+    state: directory
+  delegate_to: managerhost
+
+- name: Create node certifcate and key for each instance
+  shell: "flocker-ca create-node-certificate --outputpath=/tmp/{{ cluster_name }}/{{ inventory_hostname }}/"
+  args:
+    chdir: "/tmp/{{ cluster_name }}"
+    creates: "/tmp/{{ cluster_name }}/{{ inventory_hostname }}/node.crt"
+  delegate_to: managerhost
+
+- name: Rename the node certs
+  shell: "mv /tmp/{{ cluster_name }}/{{ inventory_hostname }}/*.crt /tmp/{{ cluster_name }}/{{ inventory_hostname }}/node.crt"
+  args:
+    creates: "/tmp/{{ cluster_name }}/{{ inventory_hostname }}/node.crt"
+  delegate_to: managerhost
+
+- name: Rename the node keys
+  shell: "mv /tmp/{{ cluster_name }}/{{ inventory_hostname }}/*.key /tmp/{{ cluster_name }}/{{ inventory_hostname }}/node.key"
+  args:
+    creates: "/tmp/{{ cluster_name }}/{{ inventory_hostname }}/node.key"
+  delegate_to: managerhost
+
+- name: Copy the node certifcates to the instances
+  synchronize:
+    src: "/tmp/{{ cluster_name }}/{{ inventory_hostname }}/node.crt"
+    dest: "/etc/flocker/node.crt"
+    owner: true
+  become: true
+  delegate_to: managerhost
+
+- name: Copy the node keys to the instances
+  synchronize:
+    src: "/tmp/{{ cluster_name }}/{{ inventory_hostname }}/node.key"
+    dest: "/etc/flocker/node.key"
+    owner: true
+  become: true
+  delegate_to: managerhost
+
+# Set Permissions on /etc/flocker/
+####################################################################################################
+
+- name: Set the correct ownership on /etc/flocker/
+  file:
+    dest: "/etc/flocker/"
+    owner: root
+    group: root
+    recurse: yes
+  become: true
+
+- name: Set the correct ownership on /etc/flocker/
+  file:
+    dest: "/etc/flocker/control-service.key"
+    owner: root
+    group: root
+    mode: 0600
+  become: true
+  when: inventory_hostname == "managerhost"
+
+# Enable and start all the services
+####################################################################################################
+
+- name: Enable the flocker-control service
+  systemd:
+    name: flocker-control
+    enabled: yes
+    masked: no
+  become: true
+  when: inventory_hostname == "managerhost"
+
+- name: Start the flocker-control service
+  systemd:
+    name: flocker-control
+    state: restarted
+  become: true
+  when: inventory_hostname == "managerhost"
+
+- name: Enable the flocker-dataset-agent service
+  systemd:
+    name: flocker-dataset-agent
+    enabled: yes
+    masked: no
+  become: true
+
+- name: Start the flocker-dataset-agent service
+  systemd:
+    name: flocker-dataset-agent
+    state: restarted
+  become: true
+
+- name: Enable the flocker-container-agent service
+  systemd:
+    name: flocker-container-agent
+    enabled: yes
+    masked: no
+  become: true
+
+- name: Start the flocker-container-agent service
+  systemd:
+    name: flocker-container-agent
+    state: restarted
+  become: true
+
+- name: Enable the flocker-docker-plugin service
+  systemd:
+    name: flocker-docker-plugin
+    enabled: yes
+    masked: no
+  become: true
+
+- name: Start the flocker-docker-plugin service
+  systemd:
+    name: flocker-docker-plugin
+    state: restarted
+  become: true
+
+- name: Enable the docker service
+  systemd:
+    name: docker
+    enabled: yes
+    masked: no
+  become: true
+
+- name: Restart the docker service
+  systemd:
+    name: docker
+    state: restarted
+  become: true

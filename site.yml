@@ -1,0 +1,64 @@
+---
+
+- name: "Preform some prep work on all of the hosts"
+  hosts: allhosts
+  become: yes
+  become_method: sudo
+  gather_facts: false
+
+  pre_tasks:
+    - name: "Install python 2.7"
+      raw: apt-get install -qq python2.7
+
+  vars_files:
+    - group_vars/environment.yml
+
+  roles:
+    - stack
+
+- name: "Install Docker and Flocker"
+  hosts: allhosts
+  become: yes
+  become_method: sudo
+  gather_facts: true
+
+  vars_files:
+    - group_vars/environment.yml
+
+  roles:
+    - docker-install
+    - flocker-install
+
+- name: "Generate all of the certificates"
+  hosts: allhosts
+  gather_facts: true
+
+  vars_files:
+    - group_vars/environment.yml
+
+  roles:
+    - flocker-certs
+
+- name: "Setup the Swarm Manager"
+  hosts: manager
+  become: yes
+  become_method: sudo
+  gather_facts: true
+
+  vars_files:
+    - group_vars/environment.yml
+
+  roles:
+    - docker-swarm-manager
+
+- name: "Setup the Swarm Workers"
+  hosts: workers
+  become: yes
+  become_method: sudo
+  gather_facts: true
+
+  vars_files:
+    - group_vars/environment.yml
+
+  roles:
+    - docker-swarm-worker

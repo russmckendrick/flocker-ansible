@@ -1,0 +1,10 @@
+---
+# These can changed if you want or need
+cluster_name: flocker-cluster
+aws_region: us-west-1
+aws_zone: us-west-1a
+
+# Don't change the varibles below unless you want experiment
+docker_url: https://get.docker.com/
+flocker_url: https://get.flocker.io/
+compose_version: 1.9.0
