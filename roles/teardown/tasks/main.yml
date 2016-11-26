@@ -1,0 +1,77 @@
+---
+
+- name: Gather facts on the controller instance
+  ec2_remote_facts:
+    region: "{{ aws_region }}"
+    filters:
+      instance-state-name: "running"
+      "tag:role": "controller"
+  register: controller_node
+
+- name: Terminate the controller
+  ec2:
+    state: "absent"
+    region: "{{ aws_region }}"
+    instance_ids: "{{ item.id }}"
+  with_items: "{{ controller_node.instances }}"
+
+- name: Gather facts on the worker instances
+  ec2_remote_facts:
+    region: "{{ aws_region }}"
+    filters:
+      instance-state-name: "running"
+      "tag:role": "worker"
+  register: worker_nodes
+
+- name: Terminate the workers
+  ec2:
+    state: "absent"
+    region: "{{ aws_region }}"
+    instance_ids: "{{ item.id }}"
+  with_items: "{{ worker_nodes.instances }}"
+
+- name: Get some details on the VPC ID
+  ec2_vpc_subnet_facts:
+    region: "{{ aws_region }}"
+    filters:
+      "tag:Name": "{{ cluster_name }}_{{ aws_region }}a"
+  register: "vpcfacts"
+
+- name: Remove the SSH security group
+  ec2_group:
+    name: "{{ cluster_name }}-ssh"
+    description: "Spin, spin, spin the Wheel of Justice, see how fast the b*****d turns"
+    state: absent
+    region: "{{ aws_region }}"
+  ignore_errors: yes
+
+- name: Remove the Swarm security group
+  ec2_group:
+    name: "{{ cluster_name }}-swarm"
+    description: "Spin, spin, spin the Wheel of Justice, see how fast the b*****d turns"
+    state: absent
+    region: "{{ aws_region }}"
+  ignore_errors: yes
+
+- name: Remove the Flocker security group
+  ec2_group:
+    name: "{{ cluster_name }}-flocker"
+    description: "Spin, spin, spin the Wheel of Justice, see how fast the b*****d turns"
+    state: absent
+    region: "{{ aws_region }}"
+  ignore_errors: yes
+
+- name: Remove the Web security group
+  ec2_group:
+    name: "{{ cluster_name }}-web"
+    state: absent
+    description: "Spin, spin, spin the Wheel of Justice, see how fast the b*****d turns"
+    region: "{{ aws_region }}"
+  ignore_errors: yes
+
+- name: Remove the VPC
+  ec2_vpc:
+    region: "{{ aws_region }}"
+    vpc_id: "{{ vpcfacts.subnets.0.vpc_id }}"
+    resource_tags: { "Name" : "{{ cluster_name }}" }
+    state: absent

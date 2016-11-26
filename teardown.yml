@@ -1,0 +1,12 @@
+---
+
+- name: Teardown our Flocker cluster
+  hosts: localhost
+  connection: local
+  gather_facts: False
+
+  vars_files:
+    - group_vars/environment.yml
+
+  roles:
+    - teardown
