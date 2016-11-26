@@ -1,12 +1,25 @@
 ---
 
-- name: "Preform some prep work on all of the hosts"
+- name: Create the VPC, Security Groups, routing and launch our Ubuntu 16.04 instances
+  hosts: localhost
+  connection: local
+  gather_facts: True
+
+  vars_files:
+    - group_vars/environment.yml
+
+  roles:
+    - aws
+
+- name: "Preform some prep work on the instances"
   hosts: allhosts
   become: yes
   become_method: sudo
   gather_facts: false
 
   pre_tasks:
+    - name: "Run an apt-get update"
+      raw: apt-get update
     - name: "Install python 2.7"
       raw: apt-get install -qq python2.7
 
@@ -16,7 +29,7 @@
   roles:
     - stack
 
-- name: "Install Docker and Flocker"
+- name: "Install Docker & Flocker"
   hosts: allhosts
   become: yes
   become_method: sudo
@@ -29,7 +42,7 @@
     - docker-install
     - flocker-install
 
-- name: "Generate all of the certificates"
+- name: "Generate and distribute all of the Flocker certificates before starting the services"
   hosts: allhosts
   gather_facts: true
 
@@ -39,8 +52,8 @@
   roles:
     - flocker-certs
 
-- name: "Setup the Swarm Manager"
-  hosts: manager
+- name: "Initialize the Docker Swarm cluster"
+  hosts: allhosts
   become: yes
   become_method: sudo
   gather_facts: true
@@ -49,16 +62,5 @@
     - group_vars/environment.yml
 
   roles:
-    - docker-swarm-manager
-
-- name: "Setup the Swarm Workers"
-  hosts: workers
-  become: yes
-  become_method: sudo
-  gather_facts: true
-
-  vars_files:
-    - group_vars/environment.yml
-
-  roles:
-    - docker-swarm-worker
+    - docker-swarm
+    - finish

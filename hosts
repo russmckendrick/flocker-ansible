@@ -1,23 +1,13 @@
-managerhost ansible_host=ec2-54-153-21-96.us-west-1.compute.amazonaws.com ansible_port=22
-workerhost01 ansible_host=ec2-52-53-196-93.us-west-1.compute.amazonaws.com ansible_port=22
-workerhost02 ansible_host=ec2-54-183-61-121.us-west-1.compute.amazonaws.com ansible_port=22
+[workers]
+[controller]
 
 [allhosts]
-managerhost
-workerhost[01:02]
 
-[manager]
-managerhost
-
-[workers]
-workerhost[01:02]
-
-[config:children]
-allhosts
-manager
+[allhosts:children]
+controller
 workers
 
-[config:vars]
+[allhosts:vars]
 ansible_connection=ssh
 ansible_user=ubuntu
 ansible_private_key_file=~/.ssh/id_rsa

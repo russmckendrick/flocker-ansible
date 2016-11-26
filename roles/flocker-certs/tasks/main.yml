@@ -1,18 +1,15 @@
 ---
 
-- stat: path=/tmp/certs-
-  register: swarm_init
-
 - name: Set  correct ssh key path
   set_fact:
     ansible_ssh_private_key_file: "~/.ssh/id_rsa"
-  when: inventory_hostname == "managerhost"
+  when: "'controller' in group_names"
 
 - name: create /tmp/{{ cluster_name }}
   file:
     path: "/tmp/{{ cluster_name }}"
     state: directory
-  when: inventory_hostname == "managerhost"
+  when: "'controller' in group_names"
 
 # Put Agent Config in place
 ####################################################################################################
@@ -31,7 +28,7 @@
   args:
     chdir: "/tmp/{{ cluster_name }}"
     creates: "/tmp/{{ cluster_name }}/cluster.crt"
-  when: inventory_hostname == "managerhost"
+  when: "'controller' in group_names"
 
 - name: Copy cluster.crt to the nodes
   synchronize:
@@ -39,31 +36,31 @@
     dest: /etc/flocker/cluster.crt
     owner: true
   become: true
-  delegate_to: managerhost
+  delegate_to: "{{ groups.controller[0] }}"
 
 # Control certificate
 ####################################################################################################
 
 - name: Create the control certificate
-  shell: "flocker-ca create-control-certificate {{ hostvars['managerhost']['ansible_nodename'] }}"
+  shell: "flocker-ca create-control-certificate {{ hostvars[groups['controller'][0]]['ansible_nodename'] }}"
   args:
     chdir: "/tmp/{{ cluster_name }}"
-    creates: "/tmp/{{ cluster_name }}/control-{{ hostvars['managerhost']['ansible_nodename'] }}.crt"
-  when: inventory_hostname == "managerhost"
+    creates: "/tmp/{{ cluster_name }}/control-{{ hostvars[groups['controller'][0]]['ansible_nodename'] }}.crt"
+  when: "'controller' in group_names"
 
 - name: Copy control.crt on the local node
-  shell: "cp /tmp/{{ cluster_name }}/control-{{ hostvars['managerhost']['ansible_nodename'] }}.crt /etc/flocker/control-service.crt"
+  shell: "cp /tmp/{{ cluster_name }}/control-{{ hostvars[groups['controller'][0]]['ansible_nodename'] }}.crt /etc/flocker/control-service.crt"
   args:
     creates: "/etc/flocker/control-service.crt"
   become: true
-  when: inventory_hostname == "managerhost"
+  when: "'controller' in group_names"
 
 - name: Copy control.key on the local node
-  shell: "cp /tmp/{{ cluster_name }}/control-{{ hostvars['managerhost']['ansible_nodename'] }}.key /etc/flocker/control-service.key"
+  shell: "cp /tmp/{{ cluster_name }}/control-{{ hostvars[groups['controller'][0]]['ansible_nodename'] }}.key /etc/flocker/control-service.key"
   args:
     creates: "/etc/flocker/control-service.key"
   become: true
-  when: inventory_hostname == "managerhost"
+  when: "'controller' in group_names"
 
 # Plug-in certificates
 ####################################################################################################
@@ -73,7 +70,7 @@
   args:
     chdir: "/tmp/{{ cluster_name }}"
     creates: "/tmp/{{ cluster_name }}/plugin.crt"
-  when: inventory_hostname == "managerhost"
+  when: "'controller' in group_names"
 
 - name: Copy plugin.crt to the nodes
   synchronize:
@@ -81,7 +78,7 @@
     dest: /etc/flocker/plugin.crt
     owner: true
   become: true
-  delegate_to: managerhost
+  delegate_to: "{{ groups.controller[0] }}"
 
 - name: Copy plugin.key to the nodes
   synchronize:
@@ -89,7 +86,7 @@
     dest: /etc/flocker/plugin.key
     owner: true
   become: true
-  delegate_to: managerhost
+  delegate_to: "{{ groups.controller[0] }}"
 
 # User certificates
 ####################################################################################################
@@ -99,25 +96,25 @@
   args:
     chdir: "/tmp/{{ cluster_name }}"
     creates: "/tmp/{{ cluster_name }}/user.crt"
-  when: inventory_hostname == "managerhost"
+  when: "'controller' in group_names"
 
 - name: Copy user.crt on the local node
   shell: "cp /tmp/{{ cluster_name }}/user.crt ~/user.crt"
   args:
     creates: "~/user.crt"
-  when: inventory_hostname == "managerhost"
+  when: "'controller' in group_names"
 
 - name: Copy user.key on the local node
-  shell: "cp /tmp/{{ cluster_name }}/user.crt ~/user.key"
+  shell: "cp /tmp/{{ cluster_name }}/user.key ~/user.key"
   args:
     creates: "~/user.key"
-  when: inventory_hostname == "managerhost"
+  when: "'controller' in group_names"
 
 - name: Copy cluster.crt on the local node
   shell: "cp /tmp/{{ cluster_name }}/cluster.crt ~/cluster.crt"
   args:
     creates: "~/cluster.crt"
-  when: inventory_hostname == "managerhost"
+  when: "'controller' in group_names"
 
 # Node certificates
 ####################################################################################################
@@ -126,26 +123,26 @@
   file:
     path: "/tmp/{{ cluster_name }}/{{ inventory_hostname }}"
     state: directory
-  delegate_to: managerhost
+  delegate_to: "{{ groups.controller[0] }}"
 
 - name: Create node certifcate and key for each instance
   shell: "flocker-ca create-node-certificate --outputpath=/tmp/{{ cluster_name }}/{{ inventory_hostname }}/"
   args:
     chdir: "/tmp/{{ cluster_name }}"
     creates: "/tmp/{{ cluster_name }}/{{ inventory_hostname }}/node.crt"
-  delegate_to: managerhost
+  delegate_to: "{{ groups.controller[0] }}"
 
 - name: Rename the node certs
   shell: "mv /tmp/{{ cluster_name }}/{{ inventory_hostname }}/*.crt /tmp/{{ cluster_name }}/{{ inventory_hostname }}/node.crt"
   args:
     creates: "/tmp/{{ cluster_name }}/{{ inventory_hostname }}/node.crt"
-  delegate_to: managerhost
+  delegate_to: "{{ groups.controller[0] }}"
 
 - name: Rename the node keys
   shell: "mv /tmp/{{ cluster_name }}/{{ inventory_hostname }}/*.key /tmp/{{ cluster_name }}/{{ inventory_hostname }}/node.key"
   args:
     creates: "/tmp/{{ cluster_name }}/{{ inventory_hostname }}/node.key"
-  delegate_to: managerhost
+  delegate_to: "{{ groups.controller[0] }}"
 
 - name: Copy the node certifcates to the instances
   synchronize:
@@ -153,7 +150,7 @@
     dest: "/etc/flocker/node.crt"
     owner: true
   become: true
-  delegate_to: managerhost
+  delegate_to: "{{ groups.controller[0] }}"
 
 - name: Copy the node keys to the instances
   synchronize:
@@ -161,7 +158,7 @@
     dest: "/etc/flocker/node.key"
     owner: true
   become: true
-  delegate_to: managerhost
+  delegate_to: "{{ groups.controller[0] }}"
 
 # Set Permissions on /etc/flocker/
 ####################################################################################################
@@ -181,7 +178,7 @@
     group: root
     mode: 0600
   become: true
-  when: inventory_hostname == "managerhost"
+  when: "'controller' in group_names"
 
 # Enable and start all the services
 ####################################################################################################
@@ -192,14 +189,14 @@
     enabled: yes
     masked: no
   become: true
-  when: inventory_hostname == "managerhost"
+  when: "'controller' in group_names"
 
 - name: Start the flocker-control service
   systemd:
     name: flocker-control
     state: restarted
   become: true
-  when: inventory_hostname == "managerhost"
+  when: "'controller' in group_names"
 
 - name: Enable the flocker-dataset-agent service
   systemd:
@@ -252,3 +249,33 @@
     name: docker
     state: restarted
   become: true
+
+- name: Get rid of the annoying flockerctl error #2
+  lineinfile:
+    dest: /usr/local/bin/flockerctl
+    regexp: "^read -d '' DEPRECATION_WARNING <<END_WARNING"
+    state: absent
+  become: true
+  when: "'controller' in group_names"
+
+- name: Get rid of the annoying flockerctl error #2
+  lineinfile:
+    dest: /usr/local/bin/flockerctl
+    regexp: "^END_WARNING"
+    state: absent
+  become: true
+  when: "'controller' in group_names"
+
+- name: Add a bash_profile for the ubuntu user
+  file:
+    path: "~/.bash_profile"
+    state: "touch"
+  when: "'controller' in group_names"
+
+- name: Add the Flocker Control Service to ubuntu users bash_profile
+  lineinfile:
+    dest: "~/.bash_profile"
+    regexp: ""
+    insertafter: "EOF"
+    line: "export FLOCKER_CONTROL_SERVICE={{ hostvars[groups['controller'][0]]['ansible_nodename'] }}\nexport FLOCKER_CERTS_PATH=~/"
+  when: "'controller' in group_names"

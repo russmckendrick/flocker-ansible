@@ -1,9 +1,8 @@
 ---
 
-- name: Install the packages
-  apt: name={{ item }} state=latest
-  with_items:
-    - git
+- name: Update all the packages
+  apt:
+    upgrade: dist
 
 - name: Create SSH key for the manager
   file:
@@ -12,18 +11,16 @@
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: "0600"
-  when: inventory_hostname == "managerhost"
+  when: "'controller' in group_names"
 
 - name: Copy our SSH key for the manager
   blockinfile:
     dest: "/home/{{ ansible_user }}/.ssh/id_rsa"
     block: "{{ lookup('file', '~/.ssh/id_rsa') }}"
-  when: inventory_hostname == "managerhost"
+  when: "'controller' in group_names"
 
 - name: Distribute the public key to all our hosts
   authorized_key:
     user: "ubuntu"
     state: "present"
     key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
-
-# - debug: msg="{{ hostvars['managerhost']['manager_ssh_key']['stdout'] }}"

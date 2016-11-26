@@ -1,0 +1,233 @@
+---
+
+- name: Create the VPC
+  ec2_vpc:
+    state: present
+    cidr_block: "{{ vpc_cidr_block }}"
+    resource_tags: { "Name" : "{{ cluster_name }}" }
+    internet_gateway: yes
+    region: "{{ aws_region }}"
+  register: vpc
+
+- name: Create the internet gateway
+  ec2_vpc_igw:
+    vpc_id: "{{ vpc.vpc_id }}"
+    state: present
+    region: "{{ aws_region }}"
+  register: igw
+
+- name: Tag the internet gateway
+  ec2_tag:
+    resource: "{{ igw.gateway_id }}"
+    state: present
+    region: "{{ aws_region }}"
+    tags: { "Name" : "{{ cluster_name }}" }
+
+- name: Add a subnet to AZ1
+  ec2_vpc_subnet:
+    state: present
+    vpc_id: "{{ vpc.vpc_id }}"
+    cidr: "{{ az1_cidr }}"
+    az: "{{ aws_region }}a"
+    resource_tags: { "Name" : "{{ cluster_name }}_{{ aws_region }}a" }
+    region: "{{ aws_region }}"
+  register: "subnet_AZ1"
+
+- name: Setup public subnet route table
+  ec2_vpc_route_table:
+    vpc_id: "{{ vpc.vpc_id }}"
+    resource_tags: { "Name" : "{{ cluster_name }}" }
+    subnets:
+      - "{{ subnet_AZ1.subnet.id }}"
+    routes:
+      - dest: 0.0.0.0/0
+        gateway_id: "{{ igw.gateway_id }}"
+    region: "{{ aws_region }}"
+  register: public_route_table
+
+- name: Find out your current public IP address using https://ipify.org/
+  ipify_facts:
+  register: public_ip
+
+- name: Register your public ip as a fact
+  set_fact:
+    your_public_ip: "{{ public_ip.ansible_facts.ipify_public_ip }}"
+
+- name: Provision security group for the Web Traffic
+  ec2_group:
+    name: "{{ cluster_name }}-web"
+    description: "Opens port 80 and 443 to {{ your_public_ip }}"
+    region: "{{ aws_region }}"
+    vpc_id: "{{ vpc.vpc_id }}"
+    rules: "{{ http_rules }}"
+  register: sg_web
+
+- name: Tag the Web Traffic security group
+  ec2_tag:
+    resource: "{{ sg_web.group_id }}"
+    state: present
+    region: "{{ aws_region }}"
+    tags: { "Name" : "{{ cluster_name }} Web" }
+
+- name: Provision security group for to allow SSH access
+  ec2_group:
+    name: "{{ cluster_name }}-ssh"
+    description: "SSH security group, opens port 22 to trusted IP addresses"
+    region: "{{ aws_region }}"
+    vpc_id: "{{ vpc.vpc_id }}"
+    rules: "{{ ssh_rules }}"
+  register: sg_ssh
+
+- name: Tag the SSH security group
+  ec2_tag:
+    resource: "{{ sg_ssh.group_id }}"
+    state: present
+    region: "{{ aws_region }}"
+    tags: { "Name" : "{{ cluster_name }} SSH" }
+
+- name: Provision security group for to allow Swarm access
+  ec2_group:
+    name: "{{ cluster_name }}-swarm"
+    description: "Swarm security group, opens swarm ports to trusted IP addresses"
+    region: "{{ aws_region }}"
+    vpc_id: "{{ vpc.vpc_id }}"
+    rules: "{{ swarm_rules }}"
+  register: sg_swarm
+
+- name: Tag the Swarm security group
+  ec2_tag:
+    resource: "{{ sg_swarm.group_id }}"
+    state: present
+    region: "{{ aws_region }}"
+    tags: { "Name" : "{{ cluster_name }} Swarm" }
+
+- name: Provision security group for to allow Flocker access
+  ec2_group:
+    name: "{{ cluster_name }}-flocker"
+    description: "Flocker security group, opens flocker ports to trusted IP addresses"
+    region: "{{ aws_region }}"
+    vpc_id: "{{ vpc.vpc_id }}"
+    rules: "{{ flocker_rules }}"
+  register: sg_flocker
+
+- name: Tag the Swarm security group
+  ec2_tag:
+    resource: "{{ sg_flocker.group_id }}"
+    state: present
+    region: "{{ aws_region }}"
+    tags: { "Name" : "{{ cluster_name }} Flocker" }
+
+- name: Search for all of the AMIs in {{ aws_region }} which match {{ image_base }}
+  ec2_ami_find:
+    region: "{{ aws_region }}"
+    name: "{{ image_base }}"
+    owner: "{{ image_owner }}"
+    architecture: "{{ image_architecture }}"
+    sort: name
+    no_result_action: fail
+  register: amiFind
+
+- debug: msg="{{ amiFind }}"
+
+- name: Filter the list of AMIs to find the latest one with an EBS backed volume
+  set_fact:
+    amiSortFilter: "{{ item }}"
+  with_items: "{{ amiFind.results }}"
+  when:
+    - not item | skipped
+    - item.virtualization_type == "{{ image_virt_type }}"
+    - item.architecture == "{{ image_architecture }}"
+    - item.is_public
+    - item.state == "available"
+    - item.root_device_type == "ebs"
+
+- name: Finally grab AMI ID of the most recent result which matches {{ image_base }} which is backed by an EBS volume
+  set_fact:
+    our_ami_id: "{{ amiSortFilter.ami_id }}"
+
+- name: Check the user {{ ansible_user_id }} has a key, if not create one
+  user:
+    name: "{{ ansible_user_id }}"
+    generate_ssh_key: yes
+    ssh_key_file: "~/.ssh/id_rsa"
+
+- name: Upload {{ ansible_user_id }}'s public key
+  ec2_key:
+    region: "{{ aws_region }}"
+    name: "{{ cluster_name }}-{{ ansible_user_id }}"
+    key_material: "{{ item }}"
+  with_file: "~/.ssh/id_rsa.pub"
+
+- name: Launch the controller node
+  ec2:
+    region: "{{ aws_region }}"
+    instance_type: "{{ instance_type }}"
+    image: "{{ our_ami_id }}"
+    wait: yes
+    key_name: "{{ cluster_name }}-{{ ansible_user_id }}"
+    group_id: [ "{{ sg_ssh.group_id }}", "{{ sg_web.group_id }}", "{{ sg_swarm.group_id }}", "{{ sg_flocker.group_id }}" ]
+    exact_count: 1
+    count_tag:
+      role: "controller"
+    vpc_subnet_id: "{{ subnet_AZ1.subnet.id }}"
+    assign_public_ip: yes
+    instance_tags:
+      Name: "{{ cluster_name }}-controller"
+      role: "controller"
+
+- name: Launch the worker nodes
+  ec2:
+    region: "{{ aws_region }}"
+    instance_type: "{{ instance_type }}"
+    image: "{{ our_ami_id }}"
+    wait: yes
+    key_name: "{{ cluster_name }}-{{ ansible_user_id }}"
+    group_id: [ "{{ sg_ssh.group_id }}", "{{ sg_web.group_id }}", "{{ sg_swarm.group_id }}", "{{ sg_flocker.group_id }}" ]
+    exact_count: "{{ no_worker_instances }}"
+    count_tag:
+      role: "worker"
+    vpc_subnet_id: "{{ subnet_AZ1.subnet.id }}"
+    assign_public_ip: yes
+    instance_tags:
+      Name: "{{ cluster_name }}-worker"
+      role: "worker"
+
+- name: Gather facts on the controller instance we just launched using the AWS API
+  ec2_remote_facts:
+    region: "{{ aws_region }}"
+    filters:
+      instance-state-name: "running"
+      "tag:role": "controller"
+  register: controller_node
+
+- name: Gather facts on the worker instances we just launched using the AWS API
+  ec2_remote_facts:
+    region: "{{ aws_region }}"
+    filters:
+      instance-state-name: "running"
+      "tag:role": "worker"
+  register: worker_nodes
+
+- name: Add our controller instance to a host group for use in the next step
+  add_host:
+    name: "{{ item.public_dns_name }}"
+    ansible_host: "{{ item.public_dns_name }}"
+    groups: "controller"
+  with_items: "{{ controller_node.instances }}"
+
+- name: Add our worker instances to a host group for use in the next step
+  add_host:
+    name: "{{ item.public_dns_name }}"
+    ansible_host: "{{ item.public_dns_name }}"
+    groups: "workers"
+  with_items: "{{ worker_nodes.instances }}"
+
+- name: Wait until SSH is available before moving onto the next step
+  local_action:
+    module: wait_for
+    host: "{{ item }}"
+    port: 22
+    delay: 10
+    timeout: 320
+    state: started
+  with_items: "{{ groups['allhosts'] }}"

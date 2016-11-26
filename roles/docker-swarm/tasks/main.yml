@@ -1,0 +1,40 @@
+---
+
+- stat: path=/tmp/swarm_init
+  register: swarm_init
+
+- name: Initalize the Swarm
+  shell: docker swarm init
+  args:
+    creates: /tmp/swarm_init
+  when: "'controller' in group_names"
+
+- name: Create a file in /tmp so we don't try and initalize the Swarm again
+  file:
+    path: "/tmp/swarm_init"
+    mode: "u=rw,g=r,o=r"
+    state: "{{ 'file' if swarm_init.stat.exists else 'touch' }}"
+  when: "'controller' in group_names"
+
+- name: Retrieve the swarm token
+  shell: docker swarm join-token -q manager
+  changed_when: False
+  register: swarm_token
+  delegate_to: "{{ groups.controller[0] }}"
+  when: "'controller' in group_names"
+
+- stat: path=/tmp/swarm_worker
+  register: swarm_worker
+
+- name: Initalize the Swarm
+  shell: "docker swarm join --token={{ hostvars[groups['controller'][0]]['swarm_token']['stdout'] }} {{ hostvars[groups['controller'][0]]['ansible_nodename'] }}:2377"
+  args:
+    creates: /tmp/swarm_worker
+  when: "'workers' in group_names"
+
+- name: Create a file in /tmp so we don't try and initalize the Swarm again
+  file:
+    path: "/tmp/swarm_worker"
+    mode: "u=rw,g=r,o=r"
+    state: "{{ 'file' if swarm_worker.stat.exists else 'touch' }}"
+  when: "'workers' in group_names"

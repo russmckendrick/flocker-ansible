@@ -3,8 +3,59 @@
 cluster_name: flocker-cluster
 aws_region: us-west-1
 aws_zone: us-west-1a
+no_worker_instances: 2
+instance_type: t2.medium
 
 # Don't change the varibles below unless you want experiment
 docker_url: https://get.docker.com/
 flocker_url: https://get.flocker.io/
 compose_version: 1.9.0
+
+vpc_cidr_block: 10.0.0.0/16
+az1_cidr: 10.0.0.0/24
+image_base: "*ubuntu-xenial-16.04-amd64-server*"
+image_owner: 099720109477
+image_architecture: x86_64
+image_virt_type: hvm
+
+# Security Groups
+http_rules:
+  - proto: tcp
+    from_port: 80
+    to_port: 80
+    cidr_ip: "0.0.0.0/0"
+  - proto: tcp
+    from_port: 8080
+    to_port: 8080
+    cidr_ip: "0.0.0.0/0"
+ssh_rules:
+  - proto: tcp
+    from_port: 22
+    to_port: 22
+    cidr_ip: "{{ your_public_ip }}/32" # Your Public IP Address from https://ipify.org/
+  - proto: tcp
+    from_port: 22
+    to_port: 22
+    group_id: "{{ sg_web.group_id }}"
+swarm_rules:
+  - proto: tcp
+    from_port: 2377
+    to_port: 2377
+    group_id: "{{ sg_web.group_id }}"
+  - proto: udp
+    from_port: 7946
+    to_port: 7946
+    group_id: "{{ sg_web.group_id }}"
+  - proto: udp
+    from_port: 4789
+    to_port: 4789
+    group_id: "{{ sg_web.group_id }}"
+flocker_rules:
+  - proto: tcp
+    from_port: 4523
+    to_port: 4523
+    group_id: "{{ sg_web.group_id }}"
+  - proto: tcp
+    from_port: 4524
+    to_port: 4524
+    group_id: "{{ sg_web.group_id }}"

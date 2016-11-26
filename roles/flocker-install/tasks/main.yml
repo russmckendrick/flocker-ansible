@@ -26,25 +26,23 @@
     state: "latest"
   with_items:
     - clusterhq-flocker-cli
-  when: inventory_hostname == "managerhost"
+  when: "'controller' in group_names"
 
 - name: Download the Flocker client installer
   get_url:
     url: "{{ flocker_url }}"
     dest: "/tmp/install-flocker-client.sh"
     mode: "0755"
-  when: inventory_hostname == "managerhost"
+  when: "'controller' in group_names"
 
 - name: Run the Flocker client installer
   command: "/tmp/install-flocker-client.sh"
   args:
     creates: /usr/local/bin/flockerctl
-  when: inventory_hostname == "managerhost"
+  when: "'controller' in group_names"
 
 - name: Create /etc/flocker
   file:
     path: "/etc/flocker"
     state: "directory"
     mode: 0700
-
-# - debug: msg="{{ ansible_distribution_version }}"
