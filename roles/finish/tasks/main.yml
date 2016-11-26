@@ -3,3 +3,4 @@
 - name: Print out some details on the cluster.
   debug:
     msg: "Your Flocker cluster is now configured, you can connect your control node by running ssh ubuntu@{{ hostvars[groups['controller'][0]]['inventory_hostname'] }}"
+  when: "'controller' in group_names"
