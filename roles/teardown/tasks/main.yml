@@ -30,6 +30,10 @@
     instance_ids: "{{ item.id }}"
   with_items: "{{ worker_nodes.instances }}"
 
+- name: Wait a minute before moving on
+  pause:
+    seconds: 60
+
 - name: Get some details on the VPC ID
   ec2_vpc_subnet_facts:
     region: "{{ aws_region }}"
@@ -40,6 +44,7 @@
 - name: Remove the SSH security group
   ec2_group:
     name: "{{ cluster_name }}-ssh"
+    vpc_id: "{{ vpcfacts.subnets.0.vpc_id }}"
     description: "Spin, spin, spin the Wheel of Justice, see how fast the b*****d turns"
     state: absent
     region: "{{ aws_region }}"
@@ -48,6 +53,7 @@
 - name: Remove the Swarm security group
   ec2_group:
     name: "{{ cluster_name }}-swarm"
+    vpc_id: "{{ vpcfacts.subnets.0.vpc_id }}"
     description: "Spin, spin, spin the Wheel of Justice, see how fast the b*****d turns"
     state: absent
     region: "{{ aws_region }}"
@@ -56,14 +62,20 @@
 - name: Remove the Flocker security group
   ec2_group:
     name: "{{ cluster_name }}-flocker"
+    vpc_id: "{{ vpcfacts.subnets.0.vpc_id }}"
     description: "Spin, spin, spin the Wheel of Justice, see how fast the b*****d turns"
     state: absent
     region: "{{ aws_region }}"
   ignore_errors: yes
 
+- name: Wait half a minute before moving on
+  pause:
+    seconds: 30
+
 - name: Remove the Web security group
   ec2_group:
     name: "{{ cluster_name }}-web"
+    vpc_id: "{{ vpcfacts.subnets.0.vpc_id }}"
     state: absent
     description: "Spin, spin, spin the Wheel of Justice, see how fast the b*****d turns"
     region: "{{ aws_region }}"
