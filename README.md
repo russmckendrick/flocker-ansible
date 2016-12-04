@@ -1,7 +1,7 @@
 Flocker Ansible
 ====================
 
-This assume you have three Ubuntu 16.04 hosts in AWS which are accessibly by the host you are going to be running this playbook on;
+This playbook builds out an AWS environment, launches x number of Ubuntu 16.04 instances and installs and configures both a Flocker and Docker Swarm cluster;
 
 ```
 ansible-playbook -i hosts site.yml --extra-vars "aws_access_id=You_IAM_Access_Key" --extra-vars "aws_secret_key=Your_IAM_Secret_Key"
