@@ -250,21 +250,21 @@
     state: restarted
   become: true
 
-- name: Get rid of the annoying flockerctl error #2
-  lineinfile:
-    dest: /usr/local/bin/flockerctl
-    regexp: "^read -d '' DEPRECATION_WARNING <<END_WARNING"
-    state: absent
-  become: true
-  when: "'controller' in group_names"
-
-- name: Get rid of the annoying flockerctl error #2
-  lineinfile:
-    dest: /usr/local/bin/flockerctl
-    regexp: "^END_WARNING"
-    state: absent
-  become: true
-  when: "'controller' in group_names"
+# - name: Get rid of the annoying flockerctl error #2
+#   lineinfile:
+#     dest: /usr/local/bin/flockerctl
+#     regexp: "^read -d '' DEPRECATION_WARNING <<END_WARNING"
+#     state: absent
+#   become: true
+#   when: "'controller' in group_names"
+#
+# - name: Get rid of the annoying flockerctl error #2
+#   lineinfile:
+#     dest: /usr/local/bin/flockerctl
+#     regexp: "^END_WARNING"
+#     state: absent
+#   become: true
+#   when: "'controller' in group_names"
 
 - name: Add a bash_profile for the ubuntu user
   file:
